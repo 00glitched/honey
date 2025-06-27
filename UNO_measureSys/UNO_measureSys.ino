@@ -4,29 +4,39 @@
 
 
 
+//Declaracion de variables para pines y relojes
+#define DHTTYPE DHT11             // Tipo de sensor DHT11
+#define DHTPIN 2                  // Pin de datos del sensor DHT11
+const int CLK_PESO=A0;            // Balanza clock
+const int pinPeso=A1;             // Balanza digital 
+const uint8_t pinHX711 = 5;       // Amplificador pin
+const uint8_t pinCLK_HX711 = 6;   // Amplificador clock pin
+const uint8_t pinLm = A5;         // Pin de lectur_ha LM35
+OneWire ds(3);                    // Pin de datos del sensor DS18B20  ???
+const int echoPin = 11;           // Pin del echo del sensor ultrasónico
+const int trigPin = 12;           // Pin del trig del sensor ultrasónico
+const uint8_t pinRELAY = 7;       // Salida de la señal del PID
 
-#define DHTTYPE DHT11     // Tipo de sensor DHT11
+// Parámetros PID
+float Kp = 2.0;
+float Ki = 0.3;
+float Kd = 1.5;
 
-const int CLK=A0;             // Balanza clock
-const int DOUT=A1;            // Balanza digital pin
-const uint8_t pinTEMP = A5;   // Pin de lectura LM35
-#define DHTPIN 2              // Pin de datos del sensor DHT11
-OneWire ds(3);                // Pin de datos del sensor DS18B20
-const uint8_t DATA_PIN = 5;  // Can use any pins!
-const uint8_t CLOCK_PIN = 6; // Can use any pins!
-const int echoPin = 11;       // Pin del echo del sensor ultrasónico
-const int trigPin = 12;       // Pin del trig del sensor ultrasónico
+float dt = 0.2; // intervalo de muestreo en segundos
 
-float measured;
-DHT dht(DHTPIN, DHTTYPE);    // Inicializa el sensor DHT
-Adafruit_HX711 balanza(DATA_PIN, CLOCK_PIN);
+// Variables para errores
+float e[3] = {0,0,0};  // errores en t0, t1, t2
+float integral = 0;
+
+DHT dht(DHTPIN, DHTTYPE);                             // Inicializa el sensor DHT
+Adafruit_HX711 balanza(pinHX711, pinCLK_HX711);       // Inicializa el Amplificador HX7111
 
 void setup() {
   Serial.begin(115200);       // Inicializa la comunicación serial a 115200 bps
   dht.begin();                // Inicializa el sensor DHT
   pinMode(trigPin, OUTPUT);   // Inicializa el pin trig como salida
   pinMode(echoPin, INPUT);    // Inicializa el pin echo como entrada
-
+  pinMode(pinRELAY,OUTPUT);
   balanza.begin();   // Inicializa balanza
   // read and toss 3 values each
   for (uint8_t t=0; t<3; t++) {
@@ -37,74 +47,136 @@ void setup() {
   }
 }
 
-void loop() {
-
-  const uint8_t N=10;
-  float h=0;
-  float t=0;
-  float distance=0;
-  float temperature=0;
-  float peso=0;
+//Declaracion de Variables
+  const uint8_t mean_amount=10;
+  float humidity;
+  float lm_temp;
+  float dht_temp;
+  float distance;
+  float sonda_temp;
+  float peso;
   uint8_t i;
+  int tol = 13;
 
-  for (i=0; i<N-1; i++)
+void loop() {
+// Actualizo el valor de las variables a 0 para que no se continuen sumando en el promedio
+    humidity=0;
+    lm_temp=0;
+    dht_temp=0;
+    distance=0;
+    sonda_temp=0;
+    peso=0;
+
+//Promedia Datos y los muestra
+  for (i=0; i<mean_amount-1; i++)
   {
     // Lectura del LM35 y DHT11
-    measured = readTemperature(pinTEMP);  // Temperatura del LM35
-    h += dht.readHumidity();         // Humedad del DHT11
-    t += dht.readTemperature();      // Temperatura del DHT11
-
-    if (isnan(h) || isnan(t)) {
+    if (isnan(humidity) || isnan(dht_temp)) {
       Serial.println("Error al leer del sensor DHT");
       return;
     }
+    //Sumatoria
+    distance      += getUltrasonicDistance();    // Distancia del sensor ultrasónico
+    lm_temp       += readTemperature(pinLm);     // Temperatura del LM35
+    sonda_temp    += leerTemperaturaDS18B20();   // Temperatura de la sonda
+    dht_temp      += dht.readTemperature();      // Temperatura del DHT11
+    humidity      += dht.readHumidity();         // Humedad del DHT11
+    peso += (float) (balanza.readChannelBlocking(CHAN_A_GAIN_64))/(2048); //Peso de la Celda de Carga
 
-    // Lectura del sensor ultrasónico
-    distance += getUltrasonicDistance();  // Distancia del sensor ultrasónico
-    // Lectura del sensor sonda temp
-    temperature += leerTemperaturaDS18B20(); // Temperatura °C del sensor
-
-    peso += (float) (balanza.readChannelBlocking(CHAN_A_GAIN_64))/(2048);
-    delay(2000/N);
+    delay(1000/mean_amount);
   }
-  h=h/N;
-  t=t/N;
-  distance=distance/N;
-  temperature=temperature/N;
-  peso=peso/N;
+  //Division segun el promedio definido
+  lm_temp     = lm_temp    /mean_amount;
+  humidity    = humidity   /mean_amount;
+  dht_temp    = dht_temp   /mean_amount;
+  distance    = distance   /mean_amount;
+  sonda_temp  = sonda_temp /mean_amount;
+  peso        = peso       /mean_amount;
 
 
+  // Error calculado segun temperatura de sonda:
+  float setpoint = 20.0;          // temperatura deseada
+  float error = setpoint - sonda_temp;
+  
+  // Actualizar errores desplazando valores anteriores
+  e[0] = e[1];
+  e[1] = e[2];
+  e[2] = error;
 
+  // Integral usando Simpson 1/3 (solo si hay al menos 3 puntos)
+  if (millis() > 2 * dt * 1000) {
+    float simpsonIntegral = (dt/3.0) * (e[0] + 4*e[1] + e[2]);
+    integral += simpsonIntegral;  
+  }
+
+  // Derivada usando diferencias divididas de Newton
+  float f01 = (e[1] - e[0]) / dt;
+  float f12 = (e[2] - e[1]) / dt;
+  float f012 = (f12 - f01) / (2*dt);
+
+  float derivada = f01 + f012 * dt;  // derivada ponderada en t2
+
+  // Control PID
+  float pid_value = Kp * e[2] + Ki * integral + Kd * derivada;
+  pid_value = -1*pid_value;
+  // Aplicar salida al actuador (por ejemplo, calentador)
+  Serial.print("RELAY:");
+  if(pid_value>tol)
+  {
+    digitalWrite(pinRELAY, LOW);
+    Serial.print("10");
+  }
+  else if (pid_value<tol)
+  {
+    digitalWrite(pinRELAY, HIGH);
+    Serial.print("0");
+  }
+  else if (pid_value<-10)
+  {
+    pid_value=-10;
+    Serial.print("0");
+  }
+  // Debug
+  Serial.print(", ");
+  Serial.print("CTRL:");
+  Serial.print(pid_value);
+  Serial.print(", ");
+  //Serial.print("Error: "); Serial.print(e[2]);
+  //Serial.print(" Integral: "); Serial.print(integral);
+  //Serial.print(" Derivada: "); Serial.print(derivada);
+  //Serial.print(" Output: "); Serial.println(output);
 
   // Mostrar los resultados de DHT11 y LM35 en el monitor serial
-  Serial.print(" Humedad:");
-  Serial.print(h);
-  Serial.print(",");
+  Serial.print("H_DHT11:");
+  Serial.print(humidity);
+  Serial.print(", ");
   //Serial.print(" %\t");
-  Serial.print(" Temperatura DHT11:");
-  Serial.print(t);
-  Serial.print(",");
+  Serial.print("T_DHT11:");
+  Serial.print(dht_temp);
+  Serial.print(", ");
   //Serial.print(" °C\t");
 
-  Serial.print(" Temperatura LM35:");
-  Serial.print(measured, 2);  // Mostrar la temperatura del LM35 con 2 decimales
-  Serial.print(",");
+  Serial.print("T_LM35:");
+  Serial.print(lm_temp, 2);  // Mostrar la temperatura del LM35 con 2 decimales
+  Serial.print(", ");
   //Serial.print(" °C\t");
 
-  // Mostrar la distancia en cm
-  Serial.print("Distancia:");
-  Serial.print(distance, 2);  // Mostrar con 2 decimales
-  Serial.print(",");
-  //Serial.print(" cm\t");
-
-  Serial.print(" Temperatura DS18:");
-  Serial.print(temperature , 3);  // Mostrar con 3 decimales
-  Serial.print(",");
+  Serial.print("T_DS18:");
+  Serial.print(sonda_temp , 3);  // Mostrar con 3 decimales
+  Serial.print(", ");
   //Serial.print(" °C");
 
-  Serial.print(" Celda:");
+  // Mostrar la distancia en cm
+  Serial.print("L_USOUND:");
+  Serial.print(distance, 2);  // Mostrar con 2 decimales
+  Serial.print(", ");
+  //Serial.print(" cm\t");
+
+
+
+  Serial.print("M_HX711:");
   Serial.print(peso , 3);  // Mostrar con 3 decimales
-  //Serial.print(",");
+  //Serial.print("");
   //Serial.print(" kg");
   Serial.print("\n");
 
@@ -213,3 +285,10 @@ float leerTemperaturaDS18B20() {
   
   return celsius;
 }
+
+ 
+  
+
+
+
+
