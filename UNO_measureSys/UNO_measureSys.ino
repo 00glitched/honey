@@ -18,11 +18,14 @@ const int trigPin = 12;           // Pin del trig del sensor ultrasónico
 const uint8_t pinRELAY = 7;       // Salida de la señal del PID
 
 // Parámetros PID
-float Kp = 2.0;
-float Ki = 0.3;
-float Kd = 1.5;
+float Kp = 4.0;
+float Ki = 0.6;
+float Kd = 0.3;
+float L_sup = 20;
+float L_inf = -5;
 
-float dt = 0.2; // intervalo de muestreo en segundos
+float dt = 0.25; // intervalo de muestreo en segundos
+int DT = 500;
 
 // Variables para errores
 float e[3] = {0,0,0};  // errores en t0, t1, t2
@@ -56,7 +59,7 @@ void setup() {
   float sonda_temp;
   float peso;
   uint8_t i;
-  int tol = 13;
+  int tol = 5;
 
 void loop() {
 // Actualizo el valor de las variables a 0 para que no se continuen sumando en el promedio
@@ -83,7 +86,7 @@ void loop() {
     humidity      += dht.readHumidity();         // Humedad del DHT11
     peso += (float) (balanza.readChannelBlocking(CHAN_A_GAIN_64))/(2048); //Peso de la Celda de Carga
 
-    delay(1000/mean_amount);
+    delay(DT/mean_amount);
   }
   //Division segun el promedio definido
   lm_temp     = lm_temp    /mean_amount;
@@ -121,21 +124,28 @@ void loop() {
   pid_value = -1*pid_value;
   // Aplicar salida al actuador (por ejemplo, calentador)
   Serial.print("RELAY:");
-  if(pid_value>tol)
+  if(pid_value>L_sup)
+  {
+    pid_value=L_sup;
+    Serial.print("10");
+  }
+  else if(pid_value>tol)
   {
     digitalWrite(pinRELAY, LOW);
     Serial.print("10");
+  }
+  else if (pid_value<L_inf)
+  {
+    pid_value=L_inf;
+    Serial.print("0");
+
   }
   else if (pid_value<tol)
   {
     digitalWrite(pinRELAY, HIGH);
     Serial.print("0");
   }
-  else if (pid_value<-10)
-  {
-    pid_value=-10;
-    Serial.print("0");
-  }
+
   // Debug
   Serial.print(", ");
   Serial.print("CTRL:");
