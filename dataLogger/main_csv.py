@@ -5,7 +5,7 @@ import os
 import csv
 
 
-PORT="/dev/ttyACM0"
+PORT="/dev/ttyUSB0"
 BAUDRATE=115200
 MAXIT=5000
 
