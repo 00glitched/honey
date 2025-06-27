@@ -38,15 +38,43 @@ void setup() {
 }
 
 void loop() {
-  // Lectura del LM35 y DHT11
-  measured = readTemperature(pinTEMP);  // Temperatura del LM35
-  float h = dht.readHumidity();         // Humedad del DHT11
-  float t = dht.readTemperature();      // Temperatura del DHT11
 
-  if (isnan(h) || isnan(t)) {
-    Serial.println("Error al leer del sensor DHT");
-    return;
+  const uint8_t N=10;
+  float h=0;
+  float t=0;
+  float distance=0;
+  float temperature=0;
+  float peso=0;
+  uint8_t i;
+
+  for (i=0; i<N-1; i++)
+  {
+    // Lectura del LM35 y DHT11
+    measured = readTemperature(pinTEMP);  // Temperatura del LM35
+    h += dht.readHumidity();         // Humedad del DHT11
+    t += dht.readTemperature();      // Temperatura del DHT11
+
+    if (isnan(h) || isnan(t)) {
+      Serial.println("Error al leer del sensor DHT");
+      return;
+    }
+
+    // Lectura del sensor ultrasónico
+    distance += getUltrasonicDistance();  // Distancia del sensor ultrasónico
+    // Lectura del sensor sonda temp
+    temperature += leerTemperaturaDS18B20(); // Temperatura °C del sensor
+
+    peso += (float) (balanza.readChannelBlocking(CHAN_A_GAIN_64))/(2048);
+    delay(2000/N);
   }
+  h=h/N;
+  t=t/N;
+  distance=distance/N;
+  temperature=temperature/N;
+  peso=peso/N;
+
+
+
 
   // Mostrar los resultados de DHT11 y LM35 en el monitor serial
   Serial.print(" Humedad:");
@@ -62,13 +90,6 @@ void loop() {
   Serial.print(measured, 2);  // Mostrar la temperatura del LM35 con 2 decimales
   Serial.print(",");
   //Serial.print(" °C\t");
-
-  // Lectura del sensor ultrasónico
-  float distance = getUltrasonicDistance();  // Distancia del sensor ultrasónico
-  // Lectura del sensor sonda temp
-  float temperature = leerTemperaturaDS18B20(); // Temperatura °C del sensor
-
-  float peso = (float) (balanza.readChannelBlocking(CHAN_A_GAIN_64))/1024;
 
   // Mostrar la distancia en cm
   Serial.print("Distancia:");
@@ -87,14 +108,14 @@ void loop() {
   //Serial.print(" kg");
   Serial.print("\n");
 
-  delay(2000);  // Espera 2 segundos entre lecturas
+  //delay(2000);  // Espera 2 segundos entre lecturas
 }
 
 // Función para leer la temperatura del LM35
 float readTemperature(uint8_t PIN) {
   uint16_t adcval = analogRead(PIN);  // Leer el valor analógico del LM35
 
-  float voltage = adcval * (5.0 / 1023.0)*100;  // Convertir a voltios
+  float voltage = (float) adcval * (5.0 / 1023.0)*100;  // Convertir a voltios
   float realTemp = voltage;        // LM35: 10 mV/°C
 
   return realTemp;
@@ -114,7 +135,7 @@ float getUltrasonicDistance() {
   long duration = pulseIn(echoPin, HIGH);
 
   // Calcular la distancia con mayor precisión
-  float distance = duration * 0.0343 / 2.0;  // Mayor precisión en el factor de velocidad
+  float distance = (float) duration * 50/43 * 0.0343 / 2.0;  // Mayor precisión en el factor de velocidad
 
   return distance;
 }
