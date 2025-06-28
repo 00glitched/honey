@@ -73,7 +73,7 @@ void loop() {
       return;
     }
     //Sumatoria
-    distance      += getUltrasonicDistance();    // Distancia del sensor ultrasónico
+    //distance      += getUltrasonicDistance();    // Distancia del sensor ultrasónico
     lm_temp       += readTemperature(pinLm);     // Temperatura del LM35
     sonda_temp    += leerTemperaturaDS18B20();   // Temperatura de la sonda
     dht_temp      += dht.readTemperature();      // Temperatura del DHT11
@@ -83,6 +83,8 @@ void loop() {
 
     delay(DT/mean_amount);
   }
+
+  distance=(sonar.ping_median(10,40.0));//*(341.32/2)/(10000));       // Distancia del sensor ultrasónico en 
   //Division segun el promedio definido
   lm_temp     = lm_temp    /mean_amount;
   humidity    = humidity   /mean_amount;
@@ -118,7 +120,8 @@ void loop() {
   float pid_value = Kp * e[2] + Ki * integral + Kd * derivada;
   pid_value = -1*pid_value;
   // Aplicar salida al actuador (por ejemplo, calentador)
-  Serial.print("RELAY:");
+  Serial.print("H_RELAY:0, ");
+  Serial.print("C_RELAY:");
   if(pid_value>L_sup)
   {
     pid_value=L_sup;
@@ -172,7 +175,7 @@ void loop() {
   //Serial.print(" °C");
 
   // Mostrar la distancia en cm
-  Serial.print("L_USOUND:");
+  Serial.print("L_JSNSR04T:");
   Serial.print(distance, 2);  // Mostrar con 2 decimales
   Serial.print(", ");
   //Serial.print(" cm\t");
@@ -184,9 +187,13 @@ void loop() {
   //Serial.print("");
   //Serial.print(" kg");
   Serial.print("\n");
-
-  //delay(2000);  // Espera 2 segundos entre lecturas
 }
+
+
+
+
+
+
 
 // Función para leer la temperatura del LM35
 float readTemperature(uint8_t PIN) {
