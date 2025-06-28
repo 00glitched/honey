@@ -1,7 +1,9 @@
 #include <OneWire.h>
 #include <DHT.h>
 #include "HX711.h"
-#include <NewPing.h>
+#import <NewPing.h>
+
+
 
 
 //Declaracion de variables para pines y relojes
@@ -23,7 +25,7 @@ float L_sup = 20;
 float L_inf = -5;
 
 float dt = 0.25; // intervalo de muestreo en segundos
-int DT = 500;
+int DT = 500;    // Intervalo de delay = 2dt
 
 // Variables para errores
 float e[3] = {0,0,0};  // errores en t0, t1, t2
@@ -38,21 +40,21 @@ void setup() {
   dht.begin();                // Inicializa el sensor DHT
   pinMode(pinRELAY,OUTPUT);
   balanza.begin(pinPeso, CLK_PESO);   // Inicializa balanza
-  balanza.set_scale(-112.f);
+  balanza.set_scale(-113.f);
   balanza.tare();
 }
 
 //Declaracion de Variables
-  const uint8_t mean_amount=10;
+  const uint8_t mean_amount=5;
   float humidity;
   float lm_temp;
   float dht_temp;
   float distance;
   float sonda_temp;
-  float pr;
   float peso;
   uint8_t i;
   int tol = 5;
+  float pr;
 
 void loop() {
 // Actualizo el valor de las variables a 0 para que no se continuen sumando en el promedio
@@ -61,10 +63,9 @@ void loop() {
     dht_temp=0;
     distance=0;
     sonda_temp=0;
-    pr=0;
     peso=0;
 
-//Promedia Datos y los muestra
+  //Promedia Datos y los muestra
   for (i=0; i<mean_amount-1; i++)
   {
     // Lectura del LM35 y DHT11
@@ -73,25 +74,28 @@ void loop() {
       return;
     }
     //Sumatoria
-    //distance      += getUltrasonicDistance();    // Distancia del sensor ultrasónico
     lm_temp       += readTemperature(pinLm);     // Temperatura del LM35
     sonda_temp    += leerTemperaturaDS18B20();   // Temperatura de la sonda
     dht_temp      += dht.readTemperature();      // Temperatura del DHT11
     humidity      += dht.readHumidity();         // Humedad del DHT11
-    pr             = balanza.get_units(10);      //Peso de la Celda de Carga
-    peso          += 13.1127+(1.00023*pr)-(0.0000012925*pr*pr)+(0.0000000000797*pr*pr*pr);
+    //pr             = balanza.get_units(20);      //Peso de la Celda de Carga
+    //peso          += 1.25*pr;//(13.1127+(1.00023*pr)-(0.0000012925*pr*pr)+(0.0000000000797*pr*pr*pr));
 
     delay(DT/mean_amount);
   }
+  balanza.power_up();
+  peso = balanza.get_units(10);
+  balanza.power_down();
 
-  distance=(sonar.ping_median(10,40.0));//*(341.32/2)/(10000));       // Distancia del sensor ultrasónico en 
+
+distance=(sonar.ping_median(10,40.0));//*(341.32/2)/(10000));       // Distancia del sensor ultrasónico en cm
+
   //Division segun el promedio definido
   lm_temp     = lm_temp    /mean_amount;
   humidity    = humidity   /mean_amount;
   dht_temp    = dht_temp   /mean_amount;
-  distance    = distance   /mean_amount;
   sonda_temp  = sonda_temp /mean_amount;
-  peso        = peso       /mean_amount;
+  //peso        = peso       /mean_amount;
 
 
   // Error calculado segun temperatura de sonda:
@@ -120,31 +124,36 @@ void loop() {
   float pid_value = Kp * e[2] + Ki * integral + Kd * derivada;
   pid_value = -1*pid_value;
   // Aplicar salida al actuador (por ejemplo, calentador)
-  Serial.print("H_RELAY:0, ");
-  Serial.print("C_RELAY:");
+  uint8_t h_relay;
+  uint8_t c_relay;
+
   if(pid_value>L_sup)
   {
     pid_value=L_sup;
-    Serial.print("10");
+    c_relay=10;
   }
   else if(pid_value>tol)
   {
     digitalWrite(pinRELAY, LOW);
-    Serial.print("10");
+    c_relay=10;
   }
   else if (pid_value<L_inf)
   {
     pid_value=L_inf;
-    Serial.print("0");
-
+    c_relay=0;
   }
   else if (pid_value<tol)
   {
     digitalWrite(pinRELAY, HIGH);
-    Serial.print("0");
+    c_relay=0;
   }
 
   // Debug
+  Serial.print("H_RELAY:");
+  Serial.print(h_relay);
+  Serial.print(", ");
+  Serial.print("C_RELAY:");
+  Serial.print(c_relay);
   Serial.print(", ");
   Serial.print("CTRL:");
   Serial.print(pid_value);
@@ -180,20 +189,12 @@ void loop() {
   Serial.print(", ");
   //Serial.print(" cm\t");
 
-
-
   Serial.print("M_HX711:");
   Serial.print(peso , 3);  // Mostrar con 3 decimales
   //Serial.print("");
   //Serial.print(" kg");
   Serial.print("\n");
 }
-
-
-
-
-
-
 
 // Función para leer la temperatura del LM35
 float readTemperature(uint8_t PIN) {
@@ -203,25 +204,6 @@ float readTemperature(uint8_t PIN) {
   float realTemp = voltage;        // LM35: 10 mV/°C
 
   return realTemp;
-}
-
-// Función para obtener la distancia del sensor ultrasónico
-float getUltrasonicDistance() {
-  digitalWrite(trigPin, LOW);  
-  delayMicroseconds(5);
-
-  // Enviar el pulso
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
-
-  // Leer la duración del pulso
-  long duration = pulseIn(echoPin, HIGH);
-
-  // Calcular la distancia con mayor precisión
-  float distance = (float) duration * 50/43 * 0.0343 / 2.0;  // Mayor precisión en el factor de velocidad
-
-  return distance;
 }
 
 float leerTemperaturaDS18B20() {
@@ -297,10 +279,3 @@ float leerTemperaturaDS18B20() {
   
   return celsius;
 }
-
- 
-  
-
-
-
-
