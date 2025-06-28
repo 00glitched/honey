@@ -7,13 +7,13 @@ from collections import defaultdict
 PORT = "/dev/ttyUSB0"
 BAUDRATE = 115200
 MAXIT = 5000
-PERIODO_PROMEDIO = 2  # 10 minutos = 600
+PERIODO_PROMEDIO = 60  # 10 minutos = 600
 
 init_time = time.time()
 last_save_time = init_time
 usb = serial.Serial(PORT, BAUDRATE)
 
-filename = "datos_promediados.csv"
+filename = "datos.csv"
 header_written = False
 console_header_printed = False
 count = 0
