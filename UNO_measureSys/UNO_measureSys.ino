@@ -1,16 +1,14 @@
 #include <OneWire.h>
 #include <DHT.h>
-#include "Adafruit_HX711.h"
-
+#include "HX711.h"
+#include <NewPing.h>
 
 
 //Declaracion de variables para pines y relojes
 #define DHTTYPE DHT11             // Tipo de sensor DHT11
 #define DHTPIN 2                  // Pin de datos del sensor DHT11
-const int CLK_PESO=A0;            // Balanza clock
-const int pinPeso=A1;             // Balanza digital 
-const uint8_t pinHX711 = 5;       // Amplificador pin
-const uint8_t pinCLK_HX711 = 6;   // Amplificador clock pin
+const int CLK_PESO=6;             // Balanza clock
+const int pinPeso=5;              // Balanza digital 
 const uint8_t pinLm = A5;         // Pin de lectur_ha LM35
 OneWire ds(3);                    // Pin de datos del sensor DS18B20  ???
 const int echoPin = 11;           // Pin del echo del sensor ultrasónico
@@ -31,23 +29,17 @@ int DT = 500;
 float e[3] = {0,0,0};  // errores en t0, t1, t2
 float integral = 0;
 
-DHT dht(DHTPIN, DHTTYPE);                             // Inicializa el sensor DHT
-Adafruit_HX711 balanza(pinHX711, pinCLK_HX711);       // Inicializa el Amplificador HX7111
+DHT dht(DHTPIN, DHTTYPE);                   // Inicializa el sensor DHT
+HX711 balanza;                              // Inicializa el Amplificador HX7111
+NewPing sonar(trigPin, echoPin,40.0);       // Inicializa el sensor ultrasonico y pongo limite de 40 cm
 
 void setup() {
   Serial.begin(115200);       // Inicializa la comunicación serial a 115200 bps
   dht.begin();                // Inicializa el sensor DHT
-  pinMode(trigPin, OUTPUT);   // Inicializa el pin trig como salida
-  pinMode(echoPin, INPUT);    // Inicializa el pin echo como entrada
   pinMode(pinRELAY,OUTPUT);
-  balanza.begin();   // Inicializa balanza
-  // read and toss 3 values each
-  for (uint8_t t=0; t<3; t++) {
-    balanza.tareA(balanza.readChannelRaw(CHAN_A_GAIN_128));
-    balanza.tareA(balanza.readChannelRaw(CHAN_A_GAIN_128));
-    balanza.tareB(balanza.readChannelRaw(CHAN_B_GAIN_32));
-    balanza.tareB(balanza.readChannelRaw(CHAN_B_GAIN_32));
-  }
+  balanza.begin(pinPeso, CLK_PESO);   // Inicializa balanza
+  balanza.set_scale(-112.f);
+  balanza.tare();
 }
 
 //Declaracion de Variables
@@ -57,6 +49,7 @@ void setup() {
   float dht_temp;
   float distance;
   float sonda_temp;
+  float pr;
   float peso;
   uint8_t i;
   int tol = 5;
@@ -68,6 +61,7 @@ void loop() {
     dht_temp=0;
     distance=0;
     sonda_temp=0;
+    pr=0;
     peso=0;
 
 //Promedia Datos y los muestra
@@ -84,7 +78,8 @@ void loop() {
     sonda_temp    += leerTemperaturaDS18B20();   // Temperatura de la sonda
     dht_temp      += dht.readTemperature();      // Temperatura del DHT11
     humidity      += dht.readHumidity();         // Humedad del DHT11
-    peso += (float) (balanza.readChannelBlocking(CHAN_A_GAIN_64))/(2048); //Peso de la Celda de Carga
+    pr             = balanza.get_units(10);      //Peso de la Celda de Carga
+    peso          += 13.1127+(1.00023*pr)-(0.0000012925*pr*pr)+(0.0000000000797*pr*pr*pr);
 
     delay(DT/mean_amount);
   }
