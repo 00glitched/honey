@@ -69,10 +69,10 @@ void loop() {
   for (i=0; i<mean_amount-1; i++)
   {
     // Lectura del LM35 y DHT11
-    if (isnan(humidity) || isnan(dht_temp)) {
-      Serial.println("Error al leer del sensor DHT");
-      return;
-    }
+    //if (isnan(humidity) || isnan(dht_temp)) {
+      //Serial.println("Error al leer del sensor DHT");
+    //  return;
+    //}
     //Sumatoria
     lm_temp       += readTemperature(pinLm);     // Temperatura del LM35
     sonda_temp    += leerTemperaturaDS18B20();   // Temperatura de la sonda
