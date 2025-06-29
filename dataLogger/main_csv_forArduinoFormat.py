@@ -6,7 +6,7 @@ from collections import defaultdict
 
 PORT = "/dev/ttyUSB0"
 BAUDRATE = 115200
-MAXIT = 5000
+MAXIT = 10000
 PERIODO_PROMEDIO = 60  # 10 minutos = 600
 
 init_time = time.time()
