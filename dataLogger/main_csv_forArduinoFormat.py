@@ -4,10 +4,11 @@ import csv
 import os
 from collections import defaultdict
 
-PORT = "/dev/ttyUSB0"
+PORT = "/dev/ttyACM0" # USBO or ACM0
 BAUDRATE = 115200
-MAXIT = 10000
-PERIODO_PROMEDIO = 60  # 10 minutos = 600
+#MAXIT = 10000
+MAX_PROMEDIOS = 10080 # 1 semana = 7*24*60*60/PERIODO = 10080
+PERIODO_PROMEDIO = 10  # 10 minutos = 600 => 1min = 60
 
 init_time = time.time()
 last_save_time = init_time
@@ -16,7 +17,7 @@ usb = serial.Serial(PORT, BAUDRATE)
 filename = "datos.csv"
 header_written = False
 console_header_printed = False
-count = 0
+count_promedios = 0
 
 acumulador = defaultdict(list)
 
@@ -71,7 +72,7 @@ while noSTOP:
         save_average_and_print(acumulador, timestamp, filename)
         acumulador = defaultdict(list)
         last_save_time = time.time()
+        count_promedios += 1
 
-    count += 1
-    if count > MAXIT:
+    if count_promedios > MAX_PROMEDIOS:
         noSTOP = False
